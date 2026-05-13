@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <title>Kotka Tilannehuone & Avaruus</title>
+    <style>
+        :root { --bg: #0f1115; --card: #1b1e24; --text: #d1d5db; --accent: #3b82f6; --time: #10b981; --space: #a855f7; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        h1 { text-align: center; color: #fff; text-transform: uppercase; letter-spacing: 2px; }
+        
+        .controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; padding: 15px; background: #15171c; border-radius: 8px; }
+        button { background: #374151; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: var(--accent); color: #fff; }
+
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+        
+        .channel { background: var(--card); border-radius: 8px; padding: 15px; border: 1px solid #2d333b; display: flex; flex-direction: column; }
+        .channel h2 { font-size: 1rem; margin: 0 0 10px 0; color: var(--accent); border-bottom: 1px solid #2d333b; padding-bottom: 5px; }
+        .channel.space-card h2 { color: var(--space); }
+        
+        .log-container { flex-grow: 1; height: 160px; overflow-y: auto; background: #0b0c0f; padding: 10px; font-family: monospace; font-size: 0.9rem; border-radius: 4px; }
+        .data-row { border-bottom: 1px dashed #222; padding: 5px 0; }
+        .time { color: var(--time); font-size: 0.8rem; display: inline-block; width: 75px; }
+        .value { color: #fff; }
+
+        .live-clock { font-size: 2rem; text-align: center; color: #fff; margin-top: 20px; text-shadow: 0 0 10px rgba(59,130,246,0.5); font-variant-numeric: tabular-nums; }
+        .clock-controls { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
+        
+        /* PARANNETTU 3D MAAPALLO */
+        .globe-container { 
+            display: flex; justify-content: center; align-items: center; 
+            margin-top: 10px; position: relative; 
+            padding: 10px;
+        }
+        
+        .globe-wrapper {
+            position: relative;
+            width: 140px; height: 140px;
+            border-radius: 50%;
+            /* Maapallon kallistus 23.5 astetta */
+            transform: rotate(23.5deg);
+            box-shadow: 0 0 30px rgba(59,130,246,0.3);
+            overflow: hidden;
+            background-color: #000;
+        }
+
+        .globe-texture {
+            position: absolute;
+            top: 0; left: 0;
+            width: 200%; height: 100%;
+            /* Luotettava satelliittikuva Maasta (unpkg / three-globe) */
+            background: url('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg') repeat-x;
+            background-size: 50% 100%;
+        }
+
+        .globe-shadow {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            /* 3D-varjostus: Aurinko paistaa vasemmalta, oikealla on yö */
+            background: transparent;
+            box-shadow: inset -25px 0 35px rgba(0,0,0,0.9), inset 10px 0 15px rgba(255,255,255,0.4);
+            pointer-events: none;
+        }
+
+        /* Nopeutettu animaatio luokka */
+        .spin-fast { animation: spinAnim 10s linear infinite; }
+        @keyframes spinAnim { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <h1>⚓ Kotkan Tilannehuone & Avaruuskeskus</h1>
+    
+    <div class="controls">
+        <button onclick="tyhjennaMuisti()">🗑️ Tyhjennä Historia</button>
+    </div>
+
+    <div class="dashboard">
+        
+        <!-- 1. MAA JA AVARUUS -->
+        <div class="channel space-card">
+            <h2>🌍 3D-Pallo & Suomen Aika</h2>
+            <div class="globe-container">
+                <div class="globe-wrapper">
+                    <!-- Texture liukuu tämän sisällä -->
+                    <div class="globe-texture" id="maapallo-texture"></div>
+                    <!-- Varjo pysyy paikoillaan antaen 3D-efektin -->
+                    <div class="globe-shadow"></div>
+                </div>
+            </div>
+            <div style="text-align:center; margin-top:15px;">
+                <button id="spin-btn" onclick="toggleMaanPyöriminen()" style="font-size: 0.8rem; background: #6b21a8;">Kytke Nopeutettu Pyöriminen (Demo)</button>
+                <div id="spin-status" style="font-size: 0.75rem; color: #888; margin-top: 5px;">Tila: Lukittu reaaliaikaan</div>
+            </div>
+        </div>
+
+        <div class="channel space-card">
+            <h2>🌌 Maapallon Sijainti (Heliokeskinen)</h2>
+            <div class="live-clock" id="avaruus-koord" style="font-size: 1.1rem; text-align: left; line-height: 1.6; margin-top: 10px;">
+                Lasketaan reittiä...
+            </div>
+        </div>
+
+        <!-- 2. LIVE-KELLOT -->
+        <div class="channel">
+            <h2>🕒 Normaali Kello</h2>
+            <div class="live-clock" id="kello-normaali">--:--:--</div>
+        </div>
+        <div class="channel">
+            <h2>⏱️ 1/10 Sekuntikello (Aika)</h2>
+            <div class="live-clock" id="kello-kymmenys">--:--:--.-</div>
+        </div>
+        <div class="channel">
+            <h2>⏲️ Sekuntikello (Ajanotto)</h2>
+            <div class="live-clock" id="sekuntikello-naytto">00:00:00.0</div>
+            <div class="clock-controls">
+                <button onclick="toggleSekuntikello()" id="sk-btn">Start</button>
+                <button onclick="resetSekuntikello()">Reset</button>
+            </div>
+        </div>
+
+        <!-- 3. LIIKENNE -->
+        <div class="channel">
+            <h2>🚆 Juna: Kotkan satama -> Kouvola</h2>
+            <div class="log-container" id="log-juna-pohjoinen"></div>
+        </div>
+        <div class="channel">
+            <h2>🚆 Juna: Kouvola -> Kotkan satama</h2>
+            <div class="log-container" id="log-juna-etela"></div>
+        </div>
+
+        <!-- 4. SÄÄ (KOTKA) -->
+        <div class="channel">
+            <h2>🌡️ Kotkan Sää (Tallennus klo 05-23:59)</h2>
+            <div class="log-container" id="log-saa-nyky"></div>
+        </div>
+        <div class="channel">
+            <h2>💨 Kotkan Tuuli (Tallennus klo 05-23:59)</h2>
+            <div class="log-container" id="log-tuuli-nyky"></div>
+        </div>
+        <div class="channel">
+            <h2>📅 Kotkan Säähistoria (Ma-Su)</h2>
+            <div class="log-container" id="log-saa-historia"></div>
+        </div>
+        <div class="channel">
+            <h2>🔮 Sääennuste: Tulevat tunnit</h2>
+            <div class="log-container" id="log-saa-tunnit"></div>
+        </div>
+        <div class="channel">
+            <h2>📆 Sääennuste: Tulevat päivät</h2>
+            <div class="log-container" id="log-saa-paivat"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- MAAPALLON PYÖRIMISEN HALLINTA ---
+        let nopeutettuPyöriminen = false;
+        function toggleMaanPyöriminen() {
+            nopeutettuPyöriminen = !nopeutettuPyöriminen;
+            const texture = document.getElementById('maapallo-texture');
+            const btn = document.getElementById('spin-btn');
+            const status = document.getElementById('spin-status');
+
+            if (nopeutettuPyöriminen) {
+                texture.classList.add('spin-fast');
+                texture.style.transform = ''; // Poistetaan reaaliaikainen lukitus
+                btn.innerText = "Paluu Reaaliaikaan";
+                btn.style.background = "#059669";
+                status.innerText = "Tila: Nopeutettu (Visuaalinen demo)";
+            } else {
+                texture.classList.remove('spin-fast');
+                btn.innerText = "Kytke Nopeutettu Pyöriminen (Demo)";
+                btn.style.background = "#6b21a8";
+                status.innerText = "Tila: Lukittu reaaliaikaan";
+            }
+        }
+
+        // --- 1. JATKUVASTI PÄIVITTYVÄT LIVE-ELEMENTIT ---
+        function paivitaLiveNakyma() {
+            const nyt = new Date();
+            const msKokonaan = nyt.getTime();
+            
+            // Kello & Sekuntikello
+            document.getElementById('kello-normaali').innerText = nyt.toLocaleTimeString('fi-FI');
+            const ms = Math.floor(nyt.getMilliseconds() / 100);
+            document.getElementById('kello-kymmenys').innerText = nyt.toLocaleTimeString('fi-FI') + '.' + ms;
+
+            // Avaruuskoordinaatit
+            const vuodenAlku = new Date(nyt.getFullYear(), 0, 1).getTime();
+            const aikaMs = msKokonaan - vuodenAlku;
+            const vuosiMs = 31558149000;
+            const kiertoKulma = (aikaMs / vuosiMs) * 2 * Math.PI;
+            
+            const etaisyysAurinkoon = 149597870;
+            const x = (Math.cos(kiertoKulma) * etaisyysAurinkoon).toFixed(1);
+            const y = (Math.sin(kiertoKulma) * etaisyysAurinkoon).toFixed(1);
+            const z = (Math.sin(kiertoKulma * 0.05) * 500000).toFixed(1); 
+
+            document.getElementById('avaruus-koord').innerHTML = `
+                <span style="color:#6b7280; font-size:0.8rem;">AURINKOKESKINEN</span><br>
+                <span style="color:var(--space);">X:</span> ${Number(x).toLocaleString('fi-FI')} km<br>
+                <span style="color:var(--space);">Y:</span> ${Number(y).toLocaleString('fi-FI')} km<br>
+                <span style="color:var(--space);">Z:</span> ${Number(z).toLocaleString('fi-FI')} km<br>
+                <span style="color:#6b7280; font-size:0.8rem;">NOPEUS: 29.78 km/s</span>
+            `;
+
+            // Maapallon reaaliaikainen pyöritys (jos nopeutus ei ole päällä)
+            if (!nopeutettuPyöriminen) {
+                // Lasketaan kuinka monta prosenttia vuorokaudesta on kulunut
+                const paivaSek = (nyt.getHours() * 3600) + (nyt.getMinutes() * 60) + nyt.getSeconds() + (nyt.getMilliseconds()/1000);
+                const paivanProsentti = (paivaSek / 86400);
+                
+                // Siirretään tekstuureja reaaliaikaisesti niin, että se täsmää kelloon
+                document.getElementById('maapallo-texture').style.transform = `translateX(-${paivanProsentti * 50}%)`;
+            }
+
+            requestAnimationFrame(paivitaLiveNakyma);
+        }
+        
+        requestAnimationFrame(paivitaLiveNakyma);
+
+        // --- SEKUNTIKELLO ---
+        let skAika = 0; let skKaynnissa = false; let skInterval;
+        function paivitaSekuntikelloNaytto() {
+            let tunnit = Math.floor(skAika / 36000);
+            let min = Math.floor((skAika % 36000) / 600);
+            let sek = Math.floor((skAika % 600) / 10);
+            let kymmenys = skAika % 10;
+            document.getElementById('sekuntikello-naytto').innerText = 
+                `${String(tunnit).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(sek).padStart(2, '0')}.${kymmenys}`;
+        }
+        function toggleSekuntikello() {
+            const btn = document.getElementById('sk-btn');
+            if (skKaynnissa) {
+                clearInterval(skInterval); skKaynnissa = false; btn.innerText = "Start";
+            } else {
+                skInterval = setInterval(() => { skAika++; paivitaSekuntikelloNaytto(); }, 100);
+                skKaynnissa = true; btn.innerText = "Stop";
+            }
+        }
+        function resetSekuntikello() {
+            clearInterval(skInterval); skAika = 0; skKaynnissa = false;
+            document.getElementById('sk-btn').innerText = "Start";
+            paivitaSekuntikelloNaytto();
+        }
+
+        // --- 2. DATAN KÄSITTELY ---
+        let varasto = JSON.parse(localStorage.getItem('kotka_data')) || {};
+        const MAX_AIKA = 24 * 60 * 60 * 1000;
+
+        function tallennaJaNayta(id, arvo) {
+            if (!varasto[id]) varasto[id] = [];
+            const nyt = Date.now();
+            varasto[id].push({ aika: nyt, arvo: arvo });
+            varasto[id] = varasto[id].filter(r => r.aika > nyt - MAX_AIKA);
+            localStorage.setItem('kotka_data', JSON.stringify(varasto));
+            piirraLoki(id);
+        }
+
+        function piirraLoki(id) {
+            const log = document.getElementById(`log-${id}`);
+            if (!log || !varasto[id]) return;
+            log.innerHTML = varasto[id].slice().reverse().map(r => `
+                <div class="data-row">
+                    <span class="time">${new Date(r.aika).toLocaleTimeString('fi-FI', {hour: '2-digit', minute:'2-digit'})}</span>
+                    <span class="value">${r.arvo}</span>
+                </div>
+            `).join('');
+        }
+
+        // --- 3. JUNA-RAJAPINNAT ---
+        async function haeJunat() {
+            try {
+                let resP = await fetch('https://rata.digitraffic.fi/api/v1/live-trains/station/KTS/KV?limit=1');
+                let dataP = await resP.json();
+                let arvoP = dataP.length > 0 ? `Juna ${dataP[0].trainType}${dataP[0].trainNumber} lähtee: ${new Date(dataP[0].timeTableRows[0].scheduledTime).toLocaleTimeString('fi-FI')}` : 'Ei junia tulossa';
+                tallennaJaNayta('juna-pohjoinen', arvoP);
+
+                let resE = await fetch('https://rata.digitraffic.fi/api/v1/live-trains/station/KV/KTS?limit=1');
+                let dataE = await resE.json();
+                let arvoE = dataE.length > 0 ? `Juna ${dataE[0].trainType}${dataE[0].trainNumber} lähtee: ${new Date(dataE[0].timeTableRows[0].scheduledTime).toLocaleTimeString('fi-FI')}` : 'Ei junia tulossa';
+                tallennaJaNayta('juna-etela', arvoE);
+            } catch(e) { console.error("Junavirhe", e); }
+        }
+
+        // --- 4. SÄÄ-RAJAPINNAT ---
+        async function haeSaaKotka() {
+            try {
+                const url = 'https://api.open-meteo.com/v1/forecast?latitude=60.4664&longitude=26.9458&current=temperature_2m,wind_speed_10m&hourly=temperature_2m&daily=temperature_2m_max,temperature_2m_min&past_days=7&timezone=Europe%2FHelsinki';
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                const tunti = new Date().getHours();
+                const sallittuAika = tunti >= 5 && tunti < 24;
+
+                if (sallittuAika) {
+                    tallennaJaNayta('saa-nyky', `${data.current.temperature_2m} °C`);
+                    tallennaJaNayta('tuuli-nyky', `${data.current.wind_speed_10m} m/s`);
+                } else {
+                    tallennaJaNayta('saa-nyky', `Yötauko (Ei tallennusta)`);
+                    tallennaJaNayta('tuuli-nyky', `Yötauko (Ei tallennusta)`);
+                }
+
+                const vpArr = ['Su', 'Ma', 'Ti', 'Ke', 'To', 'Pe', 'La'];
+                
+                let historiaHTML = '';
+                for(let i = 0; i < 7; i++) {
+                    let pvm = new Date(data.daily.time[i]);
+                    historiaHTML += `<div class="data-row">${vpArr[pvm.getDay()]} (${pvm.getDate()}.${pvm.getMonth()+1}.): Max ${data.daily.temperature_2m_max[i]}°C</div>`;
+                }
+                document.getElementById('log-saa-historia').innerHTML = historiaHTML;
+
+                let tunnitHTML = '';
+                const nykyIndeksi = data.hourly.time.findIndex(t => new Date(t) > new Date());
+                for(let i = nykyIndeksi; i < nykyIndeksi + 5; i++) {
+                    let kello = new Date(data.hourly.time[i]).getHours();
+                    tunnitHTML += `<div class="data-row">Klo ${kello}:00 -> ${data.hourly.temperature_2m[i]}°C</div>`;
+                }
+                document.getElementById('log-saa-tunnit').innerHTML = tunnitHTML;
+
+                let paivatHTML = '';
+                for(let i = 7; i < 12; i++) {
+                    let pvm = new Date(data.daily.time[i]);
+                    paivatHTML += `<div class="data-row">${vpArr[pvm.getDay()]} (${pvm.getDate()}.${pvm.getMonth()+1}.): ${data.daily.temperature_2m_min[i]}...${data.daily.temperature_2m_max[i]}°C</div>`;
+                }
+                document.getElementById('log-saa-paivat').innerHTML = paivatHTML;
+
+            } catch(e) { console.error("Säävirhe", e); }
+        }
+
+        function tyhjennaMuisti() {
+            localStorage.removeItem('kotka_data');
+            location.reload();
+        }
+
+        ['juna-pohjoinen', 'juna-etela', 'saa-nyky', 'tuuli-nyky'].forEach(piirraLoki);
+        function ajaTaustaHaut() {
+            haeJunat();
+            haeSaaKotka();
+        }
+        
+        ajaTaustaHaut();
+        setInterval(ajaTaustaHaut, 5 * 60 * 1000); 
+
+    </script>
+</body>
+</html>

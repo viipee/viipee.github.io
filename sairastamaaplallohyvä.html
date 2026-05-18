@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORBITAL OS // UNIFIED COMMAND</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://unpkg.com/globe.gl"></script>
+    <style>
+        :root {
+            --neon-cyan: #64ffda; --neon-pink: #ff64b4;
+            --bg-dark: #05050a; --panel-bg: rgba(10, 10, 20, 0.85);
+        }
+
+        body, html {
+            margin: 0; padding: 0; overflow: hidden;
+            background: var(--bg-dark); color: var(--neon-cyan);
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        #globe-container { position: fixed; top: 0; left: 0; z-index: 0; width: 100vw; height: 100vh; }
+
+        /* UI Overlay Layout */
+        #ui-wrapper {
+            position: relative; z-index: 10;
+            display: grid; grid-template-columns: 300px 1fr 300px;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh; padding: 20px; box-sizing: border-box; gap: 20px;
+            pointer-events: none;
+        }
+
+        .panel {
+            background: var(--panel-bg); border: 1px solid #333;
+            padding: 15px; border-radius: 4px; pointer-events: all;
+            backdrop-filter: blur(8px);
+        }
+
+        header {
+            grid-column: 1 / 4; display: flex; justify-content: space-between;
+            align-items: center; border-bottom: 1px solid var(--neon-cyan);
+        }
+
+        /* Mixer Styles */
+        .slider-group { margin-bottom: 12px; }
+        .slider-group label { display: flex; justify-content: space-between; font-size: 0.75em; margin-bottom: 5px; }
+        input[type=range] { width: 100%; accent-color: var(--neon-cyan); cursor: pointer; }
+
+        /* Sequencer Styles */
+        #sequencer-panel { grid-column: 1 / 4; text-align: center; }
+        .step-grid { display: grid; grid-template-columns: repeat(32, 1fr); gap: 3px; margin-top: 10px; }
+        .step { height: 20px; background: #222; border: 1px solid #444; cursor: pointer; }
+        .step.active { background: var(--neon-pink); box-shadow: 0 0 8px var(--neon-pink); }
+        .step.playing { border-color: #fff; transform: scaleY(1.2); }
+
+        /* Start Overlay */
+        #init-overlay {
+            position: fixed; inset: 0; background: var(--bg-dark); z-index: 1000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;
+        }
+        button {
+            background: transparent; border: 1px solid var(--neon-cyan); color: var(--neon-cyan);
+            padding: 15px 30px; cursor: pointer; font-family: inherit; font-weight: bold; text-transform: uppercase;
+        }
+        button:hover { background: var(--neon-cyan); color: #000; }
+        .hidden { display: none !important; }
+        .telemetry-val { color: var(--neon-pink); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="init-overlay">
+    <h1 style="color: var(--neon-pink); letter-spacing: 10px;">ORBITAL COMMAND</h1>
+    <p>Satellite Tracking & Generative Synthesis Engine</p>
+    <button id="btn-start">Establish Link</button>
+</div>
+
+<div id="globe-container"></div>
+
+<div id="ui-wrapper" class="hidden">
+    <header class="panel">
+        <div class="logo">ISS // TELEMETRY_TRACKER</div>
+        <div class="telemetry-bar">
+            LAT: <span id="val-lat" class="telemetry-val">0.00</span> |
+            LON: <span id="val-lon" class="telemetry-val">0.00</span> |
+            VEL: <span id="val-vel" class="telemetry-val">0</span> km/h
+        </div>
+    </header>
+
+    <aside id="mixer" class="panel">
+        <h3 style="margin-top:0; font-size: 0.9em; border-bottom: 1px solid #333;">MASTER MIXER</h3>
+        <div class="slider-group">
+            <label>Master Gain <span id="lbl-master">80%</span></label>
+            <input type="range" id="sl-master" min="0" max="100" value="80">
+        </div>
+        <div class="slider-group">
+            <label>ISS Noise Sweep <span id="lbl-noise">50%</span></label>
+            <input type="range" id="sl-noise" min="0" max="100" value="50">
+        </div>
+        <div class="slider-group">
+            <label>Step Sequencer <span id="lbl-seq">60%</span></label>
+            <input type="range" id="sl-seq" min="0" max="100" value="60">
+        </div>
+        <div class="slider-group">
+            <label>Celestial Drone <span id="lbl-drone">30%</span></label>
+            <input type="range" id="sl-drone" min="0" max="100" value="30">
+        </div>
+    </aside>
+
+    <main></main>
+
+    <aside id="telemetry-details" class="panel">
+        <h3 style="margin-top:0; font-size: 0.9em; border-bottom: 1px solid #333;">SYSTEM LOG</h3>
+        <div id="log" style="font-size: 0.7em; height: 100px; overflow-y: hidden; color: #888;">Initializing audio...</div>
+        <hr style="border: 0; border-top: 1px solid #333; margin: 15px 0;">
+        <div id="moon-data" style="font-size: 0.8em;">Moon Phase: --</div>
+        <div id="solar-data" style="font-size: 0.8em; margin-top:5px; color: #ffaa00;">Solar Flare: Normal</div>
+        <div style="margin-top:20px; font-size: 0.65em; color: #666;">
+            MOUSE X: Noise Cutoff<br>
+            KEYS A-K: PolySynth<br>
+            SPACE: Toggle Sequencer
+        </div>
+    </aside>
+
+    <footer id="sequencer-panel" class="panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8em;">
+            <span>32-STEP IMPULSE TRACKER</span>
+            <span>BPM: 120</span>
+        </div>
+        <div class="step-grid" id="step-container"></div>
+    </footer>
+</div>
+
+<script>
+    // --- 1. GLOBE INITIALIZATION ---
+    const world = Globe()(document.getElementById('globe-container'))
+        .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-night.jpg')
+        .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+        .atmosphereColor('#64ffda')
+        .atmosphereAltitude(0.15);
+    
+    world.controls().autoRotate = true;
+    world.controls().autoRotateSpeed = 0.5;
+
+    // --- 2. AUDIO ENGINE SETUP (Tone.js) ---
+    const masterVol = new Tone.Volume(0).toDestination();
+    const mainKeys = new Tone.PolySynth(Tone.Synth).connect(masterVol);
+    
+    // ISS Noise Sweep Nodes
+    const noiseSource = new Tone.Noise("pink").start();
+    const noiseFilter = new Tone.Filter(400, "bandpass", -24);
+    const noiseEnv = new Tone.AmplitudeEnvelope({ attack: 0.5, decay: 1, sustain: 0, release: 0.5 });
+    const noiseVol = new Tone.Volume(-5).connect(masterVol);
+    noiseSource.connect(noiseFilter);
+    noiseFilter.connect(noiseEnv);
+    noiseEnv.connect(noiseVol);
+
+    // Sequencer Nodes
+    const seqSynth = new Tone.MonoSynth({
+        oscillator: { type: "square" },
+        envelope: { attack: 0.01, decay: 0.2, sustain: 0 }
+    });
+    const seqVol = new Tone.Volume(-10).connect(masterVol);
+    seqSynth.connect(seqVol);
+
+    // Drone Nodes
+    const droneOsc = new Tone.Oscillator(55, "sawtooth").start();
+    const droneFilter = new Tone.Filter(200, "lowpass");
+    const droneVol = new Tone.Volume(-20).connect(masterVol);
+    droneOsc.connect(droneFilter).connect(droneVol);
+
+    // --- 3. STATE & UTILS ---
+    let baseFreq = 110;
+    const mapRange = (val, inMin, inMax, outMin, outMax) => ((val - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+
+    // --- 4. ISS DATA FETCHING ---
+    async function updateISS() {
+        try {
+            const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+            const data = await res.json();
+            
+            // Update UI
+            document.getElementById('val-lat').innerText = data.latitude.toFixed(4);
+            document.getElementById('val-lon').innerText = data.longitude.toFixed(4);
+            document.getElementById('val-vel').innerText = Math.round(data.velocity);
+
+            // Update Globe Marker
+            world.pointsData([{ lat: data.latitude, lng: data.longitude, size: 0.5, color: '#ff64b4' }]);
+            
+            // Trigger Audio Sweep
+            const startF = mapRange(data.latitude, -90, 90, 300, 5000);
+            const endF = mapRange(data.longitude, -180, 180, 300, 5000);
+            const dur = mapRange(data.velocity, 27500, 27700, 3, 1);
+
+            noiseFilter.frequency.value = startF;
+            noiseFilter.frequency.rampTo(endF, dur);
+            noiseEnv.triggerAttackRelease(dur);
+
+            document.getElementById('log').innerHTML = `> ISS UPLINK STABLE<br>> LAT: ${data.latitude.toFixed(2)}<br>> SWEEP: ${Math.round(startF)}Hz to ${Math.round(endF)}Hz`;
+        } catch (e) {
+            document.getElementById('log').innerText = "!! CONNECTION LOST. RETRYING...";
+        }
+    }
+
+    // --- 5. SEQUENCER LOGIC ---
+    const stepStates = new Array(32).fill(false);
+    [0, 8, 16, 24].forEach(i => stepStates[i] = true); // Default beat
+
+    const stepContainer = document.getElementById('step-container');
+    for(let i=0; i<32; i++) {
+        const div = document.createElement('div');
+        div.className = 'step' + (stepStates[i] ? ' active' : '');
+        div.onclick = () => {
+            stepStates[i] = !stepStates[i];
+            div.classList.toggle('active');
+        };
+        stepContainer.appendChild(div);
+    }
+
+    let currentStep = 0;
+    Tone.Transport.scheduleRepeat((time) => {
+        const steps = document.querySelectorAll('.step');
+        steps.forEach(s => s.classList.remove('playing'));
+        steps[currentStep].classList.add('playing');
+
+        if (stepStates[currentStep]) {
+            seqSynth.triggerAttackRelease(baseFreq * (Math.random() > 0.8 ? 2 : 1), "32n", time);
+            world.atmosphereAltitude(0.25);
+            setTimeout(() => world.atmosphereAltitude(0.15), 50);
+        }
+        currentStep = (currentStep + 1) % 32;
+    }, "16n");
+
+    // --- 6. INTERACTION ---
+    document.getElementById('btn-start').onclick = async () => {
+        await Tone.start();
+        Tone.Transport.start();
+        document.getElementById('init-overlay').classList.add('hidden');
+        document.getElementById('ui-wrapper').classList.remove('hidden');
+        
+        updateISS();
+        setInterval(updateISS, 5000);
+        calculateCelestial();
+    };
+
+    // Mixer Controls
+    const setupSlider = (id, node, labelId) => {
+        const el = document.getElementById(id);
+        el.oninput = (e) => {
+            const val = e.target.value;
+            document.getElementById(labelId).innerText = val + '%';
+            node.volume.rampTo(Tone.Math.mapLinear(val, 0, 100, -60, 0), 0.1);
+        };
+    };
+    setupSlider('sl-master', masterVol, 'lbl-master');
+    setupSlider('sl-noise', noiseVol, 'lbl-noise');
+    setupSlider('sl-seq', seqVol, 'lbl-seq');
+    setupSlider('sl-drone', droneVol, 'lbl-drone');
+
+    // Mouse Interaction
+    window.addEventListener('mousemove', (e) => {
+        const xPct = e.clientX / window.innerWidth;
+        noiseFilter.frequency.value = 100 + (xPct * 8000);
+        world.controls().autoRotateSpeed = (xPct - 0.5) * 4;
+    });
+
+    // Keyboard Interaction
+    const keys = { 'a':'C4', 'w':'C#4', 's':'D4', 'e':'D#4', 'd':'E4', 'f':'F4', 't':'F#4', 'g':'G4', 'y':'G#4', 'h':'A4', 'u':'A#4', 'j':'B4', 'k':'C5' };
+    window.onkeydown = (e) => {
+        if (e.repeat) return;
+        if (e.code === 'Space') {
+            Tone.Transport.state === 'started' ? Tone.Transport.pause() : Tone.Transport.start();
+            return;
+        }
+        const note = keys[e.key.toLowerCase()];
+        if (note) mainKeys.triggerAttack(note);
+    };
+    window.onkeyup = (e) => {
+        const note = keys[e.key.toLowerCase()];
+        if (note) mainKeys.triggerRelease(note);
+    };
+
+    // --- 7. CELESTIAL SIMULATION ---
+    function calculateCelestial() {
+        const phase = (Date.now() / 86400000) % 29.53 / 29.53;
+        baseFreq = 100 + (phase * 100);
+        document.getElementById('moon-data').innerText = `Moon Phase: ${(phase * 100).toFixed(1)}% (Base: ${Math.round(baseFreq)}Hz)`;
+
+        setInterval(() => {
+            if (Math.random() > 0.9) {
+                const flareUI = document.getElementById('solar-data');
+                flareUI.innerText = "Solar Flare: CLASS X DETECTED!";
+                flareUI.style.color = "#ff0000";
+                seqVol.volume.rampTo(5, 0.1);
+                setTimeout(() => {
+                    flareUI.innerText = "Solar Flare: Normal";
+                    flareUI.style.color = "#ffaa00";
+                    seqVol.volume.rampTo(Tone.Math.mapLinear(document.getElementById('sl-seq').value, 0, 100, -60, 0), 2);
+                }, 1500);
+            }
+        }, 4000);
+    }
+</script>
+</body>
+</html>

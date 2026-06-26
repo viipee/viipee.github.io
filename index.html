@@ -2,423 +2,685 @@
 <html lang="fi">
 <head>
     <meta charset="UTF-8">
-    <title>Tilannehuone & Avaruuskeskus</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limatieteen laitos</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        :root { --bg: #0b0c10; --card: #1f2833; --text: #c5c6c7; --accent: #66fcf1; --time: #45a29e; --space: #ff007f; --sun: #ffcc00; --elec: #fbbf24; --water: #3b82f6; --analog: #e2e8f0; }
-        body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; }
-        h1 { text-align: center; color: #fff; text-transform: uppercase; letter-spacing: 2px; }
-        
-        .controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 15px; margin-bottom: 20px; padding: 15px; background: #151b22; border-radius: 8px; }
-        button, input { background: #2b3a42; color: white; border: 1px solid var(--accent); padding: 8px 16px; border-radius: 4px; font-weight: bold; }
-        button { cursor: pointer; }
-        button:hover { background: var(--accent); color: #000; }
-        input::placeholder { color: #888; }
+        :root {
+            --bg-color: #121824;
+            --card-bg: #1e293b;
+            --text-color: #f8fafc;
+            --accent-color: #334155;
+            --highlight: #38bdf8;
+            --warning: #facc15;
+            --success: #22c55e;
+        }
 
-        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; }
-        
-        .channel { background: var(--card); border-radius: 8px; padding: 15px; border: 1px solid #333; display: flex; flex-direction: column; }
-        .channel h2 { font-size: 1rem; margin: 0 0 10px 0; color: var(--accent); border-bottom: 1px solid #333; padding-bottom: 5px; }
-        
-        .wide-card { grid-column: 1 / -1; } 
-        @media (min-width: 1000px) { .wide-card { grid-column: span 2; } }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
 
-        .log-container { flex-grow: 1; height: 160px; overflow-y: auto; background: #0b0c10; padding: 10px; font-family: monospace; font-size: 0.9rem; border-radius: 4px; border: 1px inset #111; }
-        .data-row { border-bottom: 1px dashed #222; padding: 5px 0; display: flex; justify-content: space-between;}
-        .time { color: var(--time); font-size: 0.8rem; display: inline-block; width: 75px; }
-        .value { color: #fff; text-align: right; }
+        .search-container {
+            margin-bottom: 25px;
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 400px;
+        }
 
-        /* Sää-animaatio */
-        #weather-canvas { width: 100%; height: 160px; background: #050505; border-radius: 8px; box-shadow: inset 0 0 15px rgba(0,0,0,1); display: block; margin-top: 10px; }
+        input {
+            flex: 1;
+            padding: 12px 18px;
+            border-radius: 25px;
+            border: 1px solid var(--accent-color);
+            background-color: var(--card-bg);
+            color: white;
+            font-size: 16px;
+        }
 
-        /* Kello-osio */
-        .clock-wrapper { display: flex; justify-content: center; align-items: center; gap: 30px; margin-top: 10px; }
-        .live-clock { font-size: 2.5rem; text-align: center; color: #fff; text-shadow: 0 0 10px rgba(102,252,241,0.5); font-variant-numeric: tabular-nums; }
-        
-        .analog-clock { width: 100px; height: 100px; border: 4px solid var(--accent); border-radius: 50%; position: relative; background: radial-gradient(circle, #1f2833 0%, #0b0c10 100%); box-shadow: 0 0 15px rgba(102,252,241,0.2); }
-        .analog-clock::after { content: ''; position: absolute; width: 8px; height: 8px; background: #fff; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; }
-        .hand { position: absolute; bottom: 50%; left: 50%; transform-origin: bottom; background: #fff; border-radius: 4px; transform: translateX(-50%); }
-        .hour-hand { width: 4px; height: 30px; background: var(--text); z-index: 3; }
-        .min-hand { width: 3px; height: 40px; background: var(--accent); z-index: 4; }
-        .sec-hand { width: 2px; height: 45px; background: var(--space); z-index: 5; }
+        button {
+            padding: 12px 24px;
+            border-radius: 25px;
+            border: none;
+            background-color: var(--highlight);
+            color: #0f172a;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
 
-        /* Analogiset mittarit */
-        .analog-gauge { width: 100%; height: 140px; background: #050505; border-radius: 8px; display: block; border: 1px solid #222; }
+        button:hover { opacity: 0.9; }
 
-        #space-sim { width: 100%; height: 250px; background: #050505; border-radius: 8px; box-shadow: inset 0 0 20px rgba(0,0,0,1); display: block; }
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+        }
 
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-thumb { background: #45a29e; border-radius: 3px; }
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            min-height: 180px;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .card h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #94a3b8;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .value {
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin: 5px 0;
+        }
+
+        .small-text {
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+
+        /* Kompassi */
+        .compass {
+            width: 70px;
+            height: 70px;
+            border: 3px solid #64748b;
+            border-radius: 50%;
+            position: relative;
+            margin-top: 10px;
+        }
+        .compass-arrow {
+            width: 4px;
+            height: 35px;
+            background-color: var(--highlight);
+            position: absolute;
+            top: 5px;
+            left: 33px;
+            transform-origin: bottom center;
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Yleinen mittari (UV ja Tähtitaivas) */
+        .meter-bg {
+            width: 100%;
+            height: 12px;
+            border-radius: 10px;
+            position: relative;
+            margin-top: 15px;
+            background: #334155;
+        }
+        .uv-gradient { background: linear-gradient(to right, #22c55e, #eab308, #f97316, #ef4444, #a855f7); }
+        .star-gradient { background: linear-gradient(to left, #22c55e, #eab308, #ef4444); }
+        .day-gradient { background: linear-gradient(to right, #38bdf8, #facc15, #f97316, #4338ca); }
+
+        .meter-pointer {
+            width: 6px;
+            height: 18px;
+            background: white;
+            position: absolute;
+            top: -3px;
+            left: 0%;
+            border-radius: 3px;
+            transition: left 0.5s ease;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        /* Päivän kulku (Progress bar) */
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 10px;
+            background-color: var(--highlight);
+            width: 0%;
+            transition: width 1s linear;
+        }
+
+        /* Ennustelista */
+        .scroll-box {
+            width: 100%;
+            max-height: 140px;
+            overflow-y: auto;
+            text-align: left;
+            padding-right: 5px;
+            cursor: grab;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        .scroll-box::-webkit-scrollbar { display: none; }
+        .scroll-box:active { cursor: grabbing; }
+        .scroll-item {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--accent-color);
+            padding: 8px 0;
+            font-size: 14px;
+            user-select: none;
+        }
+
+        /* Lämpötilatrendi Graafi */
+        .trend-bar-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            height: 100%;
+            flex: 1;
+            position: relative;
+        }
+        .trend-bar {
+            width: 22px;
+            border-radius: 4px 4px 0 0;
+            transition: height 0.5s ease;
+            position: relative;
+        }
+        .trend-val {
+            position: absolute;
+            top: -22px;
+            font-size: 13px;
+            font-weight: bold;
+            width: 100%;
+            text-align: center;
+        }
+        .trend-time {
+            font-size: 12px;
+            color: #94a3b8;
+            position: absolute;
+            bottom: -22px;
+            white-space: nowrap;
+        }
+
+        #map { width: 100%; height: 100%; min-height: 160px; border-radius: 12px; }
+
+        /* Ajastin ja Kello */
+        .digital-clock {
+            font-family: monospace;
+            font-size: 2.2rem;
+            color: var(--highlight);
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .countdown {
+            font-family: monospace;
+            font-size: 1.2rem;
+            color: var(--warning);
+            background: rgba(0,0,0,0.3);
+            padding: 4px 10px;
+            border-radius: 8px;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
 
-    <h1>⚓ <span id="city-title">Kotkan</span> Master-Tilannehuone</h1>
-    
-    <div class="controls">
-        <div>
-            <input type="text" id="kaupunki-input" placeholder="Syötä kaupunki..." value="Kotka">
-            <button onclick="vaihdaKaupunki()">📍 Vaihda</button>
-        </div>
-        <button id="c64-btn" onclick="toggleC64Audio()" style="border-color: #ff007f;">🎵 3-CH C64 Äänet: OFF</button>
-        <button onclick="tyhjennaMuisti()">🗑️ Tyhjennä Historia</button>
+    <div class="search-container">
+        <input type="text" id="cityInput" value="Kotka" placeholder="Kirjoita kaupunki..." onkeypress="if(event.key === 'Enter') getWeather()">
+        <button onclick="getWeather()">Haeppa sää</button>
     </div>
 
-    <div class="dashboard">
-        
-        <div class="channel wide-card">
-            <h2 style="color: var(--space);">☄️ Kineettinen Avaruussimulaattori</h2>
-            <canvas id="space-sim" width="800" height="300"></canvas>
+    <div class="grid-container">
+        <div class="card">
+            <h3 id="cityName">Lämpötila nyt</h3>
+            <div class="value" id="temp">- °C</div>
+            <div id="weatherDesc" style="text-transform: capitalize; color: #94a3b8;">--</div>
         </div>
 
-        <div class="channel wide-card">
-            <h2 style="color: var(--sun);">🌪️ Reaaliaikainen Sää-HUD & Tuulianimaatio</h2>
-            <canvas id="weather-canvas" width="800" height="160"></canvas>
-        </div>
-
-        <div class="channel wide-card">
-            <h2>🕒 Aikakeskus</h2>
-            <div class="clock-wrapper">
-                <div class="analog-clock">
-                    <div class="hand hour-hand" id="hour-hand"></div>
-                    <div class="hand min-hand" id="min-hand"></div>
-                    <div class="hand sec-hand" id="sec-hand"></div>
-                </div>
-                <div class="live-clock" id="kello-normaali">--:--:--</div>
+        <div class="card">
+            <h3>Lämpötila tuntuu</h3>
+            <div class="value" id="feelsLike">- °C</div>
+            <div class="small-text">
+                Päivän alin: <span id="tempMin" style="color:#38bdf8">-</span> | Ylin: <span id="tempMax" style="color:#facc15">-</span>
             </div>
         </div>
 
-        <div class="channel">
-            <h2 style="color: var(--analog);">🧭 Ilmanpaine (hPa)</h2>
-            <canvas id="gauge-pressure" class="analog-gauge" width="300" height="140"></canvas>
-        </div>
-        <div class="channel">
-            <h2 style="color: #fb923c;">☀️ UV-Säteilyindeksi</h2>
-            <canvas id="gauge-uv" class="analog-gauge" width="300" height="140"></canvas>
-        </div>
-        <div class="channel">
-            <h2 style="color: #94a3b8;">☁️ Pilvisyys (%)</h2>
-            <canvas id="gauge-clouds" class="analog-gauge" width="300" height="140"></canvas>
-        </div>
-        <div class="channel">
-            <h2 style="color: #60a5fa;">💧 Kastepiste (°C)</h2>
-            <canvas id="gauge-dew" class="analog-gauge" width="300" height="140"></canvas>
+        <div class="card">
+            <h3>Tuuli ja suunta</h3>
+            <div class="value" id="windSpeed">- m/s</div>
+            <div class="compass">
+                <div class="compass-arrow" id="compassArrow"></div>
+            </div>
         </div>
 
-        <div class="channel">
-            <h2 style="color: var(--water);">🌊 Merisää (Aallonkorkeus)</h2>
-            <div class="log-container" id="log-merisaa"></div>
-        </div>
-        <div class="channel">
-            <h2 style="color: var(--water);">🚢 Satamatutka (15km säde)</h2>
-            <div class="log-container" id="log-satamatutka"></div>
+        <div class="card">
+            <h3>Päivän varustus</h3>
+            <div class="value" id="dressIcon" style="font-size: 3rem;">❓</div>
+            <div id="dressText" style="font-weight: bold; margin-top: 10px;">Haetaan vinkkiä...</div>
         </div>
 
-        <div class="channel">
-            <h2 style="color: var(--elec);">⚡ Pörssisähkö (Kuluva tunti)</h2>
-            <div class="log-container" id="log-sahko"></div>
-        </div>
-        <div class="channel">
-            <h2 style="color: #10b981;">🍃 Ilmanlaatu (AQI & PM2.5)</h2>
-            <div class="log-container" id="log-ilmanlaatu"></div>
+        <div class="card">
+            <h3>Ilmankosteus</h3>
+            <div class="value" id="humidity">- %</div>
         </div>
 
-        <div class="channel">
-            <h2 style="color: #a855f7;">🌌 Avaruus & Aurinko</h2>
-            <div class="log-container" id="log-avaruus"></div>
+        <div class="card">
+            <h3>Ilmanpaine & Näkyvyys</h3>
+            <div class="value" id="pressure">-</div>
+            <div class="small-text">hPa</div>
+            <div class="small-text" style="margin-top:10px;">Näkyvyys: <span id="visibility" style="color:white; font-weight:bold;">-</span> km</div>
         </div>
-        <div class="channel">
-            <h2>📅 Säähistoria (Ma-Su)</h2>
-            <div class="log-container" id="log-saa-historia"></div>
+
+        <div class="card">
+            <h3>UV-Indeksi</h3>
+            <div class="value" id="uvValue">-</div>
+            <div id="uvText" class="small-text">Haetaan...</div>
+            <div class="meter-bg uv-gradient">
+                <div class="meter-pointer" id="uvPointer"></div>
+            </div>
         </div>
-        <div class="channel wide-card">
-            <h2>🔮 Sääennuste (Seuraavat 24h)</h2>
-            <div class="log-container" id="log-saa-tunnit" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; height: auto; max-height: 200px;"></div>
+
+        <div class="card">
+            <h3>Tähtitaivas & Revontulet</h3>
+            <div class="value" id="starIcon">🔭</div>
+            <div id="starText" style="font-weight: bold; margin-bottom: 5px;">-</div>
+            <div class="small-text">Pilvisyys: <span id="cloudCoverValue">-</span> %</div>
+            <div class="meter-bg star-gradient">
+                <div class="meter-pointer" id="starPointer"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Aurinko</h3>
+            <div style="display:flex; gap:15px; font-size:1.1rem; margin-bottom:5px;">
+                <div>🌅 <span id="sunriseTime">-</span></div>
+                <div>🌇 <span id="sunsetTime">-</span></div>
+            </div>
+            <div class="small-text" id="countdownLabel" style="margin-top:10px;">Aikaa tapahtumaan:</div>
+            <div class="countdown" id="sunCountdown">--:--:--</div>
+        </div>
+
+        <div class="card">
+            <h3>Kuun vaihe</h3>
+            <div class="value" style="font-size:2.5rem;" id="moonIcon">🌕</div>
+            <div id="moonPhase" style="font-weight:bold; margin-bottom:5px;">-</div>
+            <div class="small-text">Valaistu: <span id="moonIllumination">-</span> %</div>
+        </div>
+
+        <div class="card">
+            <h3>Paikallinen Aika</h3>
+            <div class="digital-clock" id="liveClock">--:--:--</div>
+            <div id="liveDate" style="color: #94a3b8; margin-bottom: 15px;">-</div>
+            <div class="meter-bg" style="background:#1e293b; border: 1px solid #334155; height: 8px;">
+                <div class="progress-bar-fill day-gradient" id="dayProgressBar"></div>
+            </div>
+            <div class="small-text" style="margin-top:5px;">Vuorokautta kulunut: <span id="dayProgressText">-</span>%</div>
+        </div>
+
+        <div class="card">
+            <h3>Tiesitkö?</h3>
+            <div id="weatherFact" style="font-size: 15px; line-height: 1.5; font-style: italic; color: #cbd5e1;">
+                Ladataan faktaa...
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Tuntiennuste</h3>
+            <div class="scroll-box" id="forecastBox">
+                Haetaan ennustetta...
+            </div>
+        </div>
+
+        <div class="card" style="padding: 5px;">
+            <div id="map"></div>
+        </div>
+
+        <div class="card">
+            <h3>Sademäärä</h3>
+            <div class="value" id="rainAmount">0 mm</div>
+            <div id="rainText" class="small-text">Viimeisimmän havainnon mukaan</div>
+        </div>
+
+        <div class="card">
+            <h3>Lämpötilatrendi</h3>
+            <div id="trendChart" style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%; height: 80px; margin-top: 25px; margin-bottom: 15px;">
+                </div>
         </div>
     </div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Sijaintimuuttujat (Oletus Kotka)
-        let kohdeKaupunki = 'Kotka';
-        let lat = 60.4664; let lon = 26.9458;
-        let sääData = { temp: 0, wind: 0, windDir: 0, hum: 0, pressure: 1013, uv: 0, clouds: 0, dew: 0 };
+        // Sääfaktat
+        const weatherFacts = [
+            "Salama on todellisuudessa noin 5 kertaa kuumempi kuin auringon pinta.",
+            "Vesipisara voi pysyä pilvessä kymmeniä minuutteja ennen kuin se putoaa.",
+            "Suomen kaikkien aikojen lämpöennätys on 37,2 °C, mitattu Liperissä vuonna 2010.",
+            "Suomen kylmyysennätys on -51,5 °C, mitattu Kittilän Pokassa tammikuussa 1999.",
+            "Maapallolla iskee salama noin 100 kertaa joka ikinen sekunti.",
+            "Sateenkaari on todellisuudessa täysi ympyrä, mutta maanpinnalta näemme siitä vain puolet.",
+            "Yksi tavallinen kumpupilvi voi painaa yli miljoona kiloa siinä olevan veden takia!",
+            "Maailman sateisin paikka on Mawsynram Intiassa. Siellä sataa lähes 12 metriä vuodessa."
+        ];
 
-        // --- 3-KANAVAINEN C64 AUDIO ---
-        let audioCtx = null;
-        let arpInterval, bassInterval, padInterval;
-        let oscArp, oscBass, oscPad;
-        let arpIndex = 0, bassIndex = 0, padIndex = 0;
-        
-        const arpNotes = [261.63, 329.63, 392.00, 523.25, 392.00, 329.63]; // C4, E4, G4, C5, G4, E4
-        const bassNotes = [65.41, 65.41, 98.00, 98.00]; // C2, C2, G2, G2
-        const padNotes = [164.81, 196.00]; // E3, G3
+        let map = L.map('map', {zoomControl: false}).setView([60.1699, 24.9384], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+        let marker = L.marker([60.1699, 24.9384]).addTo(map);
 
-        function createOsc(type, vol) {
-            let osc = audioCtx.createOscillator();
-            let gain = audioCtx.createGain();
-            osc.type = type; gain.gain.value = vol;
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.start(); return osc;
-        }
+        let sunCountdownTimer = null; 
 
-        function toggleC64Audio() {
-            if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-            const btn = document.getElementById('c64-btn');
+        // Live Kello
+        setInterval(() => {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('fi-FI');
+            document.getElementById('liveClock').innerText = timeStr;
             
-            if (arpInterval) { // Sammuta
-                clearInterval(arpInterval); clearInterval(bassInterval); clearInterval(padInterval);
-                arpInterval = null;
-                if(oscArp) { oscArp.stop(); oscBass.stop(); oscPad.stop(); }
-                btn.innerText = "🎵 3-CH C64 Äänet: OFF"; btn.style.borderColor = "#ff007f";
-            } else { // Käynnistä
-                oscArp = createOsc('square', 0.04);  // CH1: Lead Arpeggio
-                oscBass = createOsc('sawtooth', 0.06); // CH2: Basso
-                oscPad = createOsc('triangle', 0.03);  // CH3: Taustaharmonia
+            const options = { weekday: 'long', day: 'numeric', month: 'long' };
+            document.getElementById('liveDate').innerText = now.toLocaleDateString('fi-FI', options);
 
-                arpInterval = setInterval(() => {
-                    oscArp.frequency.setValueAtTime(arpNotes[arpIndex], audioCtx.currentTime);
-                    arpIndex = (arpIndex + 1) % arpNotes.length;
-                }, 100);
+            const secondsPassed = (now.getHours() * 3600) + (now.getMinutes() * 60) + now.getSeconds();
+            const percent = (secondsPassed / 86400) * 100;
+            document.getElementById('dayProgressBar').style.width = `${percent}%`;
+            document.getElementById('dayProgressText').innerText = percent.toFixed(1);
+        }, 1000);
 
-                bassInterval = setInterval(() => {
-                    oscBass.frequency.setValueAtTime(bassNotes[bassIndex], audioCtx.currentTime);
-                    bassIndex = (bassIndex + 1) % bassNotes.length;
-                }, 400);
+        async function getWeather() {
+            const cityInput = document.getElementById('cityInput').value.trim();
+            if(!cityInput) return;
 
-                padInterval = setInterval(() => {
-                    oscPad.frequency.setValueAtTime(padNotes[padIndex], audioCtx.currentTime);
-                    padIndex = (padIndex + 1) % padNotes.length;
-                }, 800);
+            const randomFact = weatherFacts[Math.floor(Math.random() * weatherFacts.length)];
+            document.getElementById('weatherFact').innerText = `"${randomFact}"`;
 
-                btn.innerText = "🎵 3-CH C64 Äänet: ON"; btn.style.borderColor = "#10b981";
-            }
-        }
-
-        // --- KINEETTINEN SIMULAATTORI ---
-        const simCanvas = document.getElementById('space-sim');
-        const simCtx = simCanvas.getContext('2d');
-        let particles = []; let simTime = 0;
-        for(let i=0; i<150; i++) particles.push({ x: simCanvas.width/2, y: simCanvas.height/2, angle: Math.random() * Math.PI * 2, speed: 1 + Math.random() * 2 });
-
-        function piirraAvaruusSimulaatio() {
-            simTime += 0.01;
-            simCtx.fillStyle = 'rgba(5, 5, 5, 0.3)'; simCtx.fillRect(0, 0, simCanvas.width, simCanvas.height);
-            const cx = simCanvas.width / 2; const cy = simCanvas.height / 2; const orbitRadius = 250;
-            const ex = cx + Math.cos(simTime) * orbitRadius; const ey = cy + Math.sin(simTime) * orbitRadius;
-
-            particles.forEach(p => {
-                p.x += Math.cos(p.angle) * p.speed; p.y += Math.sin(p.angle) * p.speed;
-                let dx = p.x - ex; let dy = p.y - ey; let dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist < 60) {
-                    let force = (60 - dist) * 0.05; p.x += (dx / dist) * force; p.y += (dy / dist) * force;
-                    simCtx.fillStyle = 'rgba(102, 252, 241, 0.9)'; 
-                } else { simCtx.fillStyle = 'rgba(255, 200, 100, 0.6)'; }
-                simCtx.fillRect(p.x, p.y, 2, 2);
-                if (p.x < 0 || p.x > simCanvas.width || p.y < 0 || p.y > simCanvas.height) { p.x = cx; p.y = cy; p.angle = Math.random() * Math.PI * 2; }
-            });
-            simCtx.beginPath(); simCtx.arc(cx, cy, 25, 0, Math.PI*2); simCtx.fillStyle = '#ffcc00'; simCtx.fill(); 
-            simCtx.beginPath(); simCtx.arc(ex, ey, 60, 0, Math.PI*2); simCtx.strokeStyle = 'rgba(102, 252, 241, 0.1)'; simCtx.stroke();
-            simCtx.beginPath(); simCtx.arc(ex, ey, 10, 0, Math.PI*2); simCtx.fillStyle = '#3b82f6'; simCtx.fill(); 
-        }
-
-        // --- SÄÄ-HUD & ANIMAATIO (CANVAS) ---
-        const wCanvas = document.getElementById('weather-canvas');
-        const wCtx = wCanvas.getContext('2d');
-        let windParticles = [];
-        for(let i=0; i<100; i++) windParticles.push({ x: Math.random()*800, y: Math.random()*160, length: Math.random()*15+5 });
-
-        function piirraSaaHUD() {
-            wCtx.fillStyle = 'rgba(5, 5, 5, 0.2)'; wCtx.fillRect(0, 0, wCanvas.width, wCanvas.height);
-
-            // Tuulianimaatio
-            let angleRad = (sääData.windDir + 90) * (Math.PI / 180); 
-            let vx = Math.cos(angleRad) * (sääData.wind + 1);
-            let vy = Math.sin(angleRad) * (sääData.wind + 1);
-
-            wCtx.strokeStyle = 'rgba(102, 252, 241, 0.4)'; wCtx.lineWidth = 1;
-            windParticles.forEach(p => {
-                wCtx.beginPath(); wCtx.moveTo(p.x, p.y);
-                p.x += vx; p.y += vy;
-                wCtx.lineTo(p.x, p.y); wCtx.stroke();
-                if (p.x < 0) p.x = wCanvas.width; if (p.x > wCanvas.width) p.x = 0;
-                if (p.y < 0) p.y = wCanvas.height; if (p.y > wCanvas.height) p.y = 0;
-            });
-
-            // Lämpötilapalkki & Teksti
-            wCtx.fillStyle = 'rgba(0, 0, 0, 0.6)'; wCtx.fillRect(20, 20, 250, 120);
-            wCtx.strokeStyle = '#333'; wCtx.strokeRect(20, 20, 250, 120);
-            
-            wCtx.fillStyle = '#ffcc00'; wCtx.font = 'bold 24px monospace';
-            wCtx.fillText(`LÄMPÖTILA: ${sääData.temp}°C`, 35, 50);
-            
-            wCtx.fillStyle = '#66fcf1'; wCtx.font = '16px monospace';
-            wCtx.fillText(`KOSTEUS:   ${sääData.hum}%`, 35, 80);
-            wCtx.fillText(`TUULI:     ${sääData.wind} m/s`, 35, 110);
-
-            // Minigraafi lämpötilalle
-            wCtx.fillStyle = '#444'; wCtx.fillRect(180, 70, 70, 10);
-            wCtx.fillStyle = '#ffcc00'; wCtx.fillRect(180, 70, Math.min((sääData.hum/100)*70, 70), 10);
-            
-            wCtx.fillStyle = '#444'; wCtx.fillRect(180, 100, 70, 10);
-            wCtx.fillStyle = '#66fcf1'; wCtx.fillRect(180, 100, Math.min((sääData.wind/30)*70, 70), 10);
-        }
-
-        // --- ANALOGISET MITTARIT ---
-        function piirraAnaloginenMittari(canvasId, arvo, min, max, yksikko, vari) {
-            const c = document.getElementById(canvasId); if(!c) return;
-            const ctx = c.getContext('2d');
-            const w = c.width, h = c.height, cx = w/2, cy = h - 20, r = 80;
-
-            ctx.clearRect(0,0,w,h);
-            
-            // Taustakaari
-            ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 2*Math.PI);
-            ctx.lineWidth = 10; ctx.strokeStyle = '#222'; ctx.stroke();
-
-            // Aktiivinen kaari
-            let prosentti = Math.max(0, Math.min(1, (arvo - min) / (max - min)));
-            let loppuKulma = Math.PI + (prosentti * Math.PI);
-            ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, loppuKulma);
-            ctx.strokeStyle = vari; ctx.stroke();
-
-            // Viisari
-            ctx.beginPath(); ctx.moveTo(cx, cy);
-            let viisariX = cx + Math.cos(loppuKulma) * (r - 15);
-            let viisariY = cy + Math.sin(loppuKulma) * (r - 15);
-            ctx.lineTo(viisariX, viisariY);
-            ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
-            
-            // Keskuspiste
-            ctx.beginPath(); ctx.arc(cx, cy, 6, 0, 2*Math.PI); ctx.fillStyle = '#fff'; ctx.fill();
-
-            // Teksti
-            ctx.fillStyle = vari; ctx.font = 'bold 18px monospace'; ctx.textAlign = 'center';
-            ctx.fillText(`${arvo} ${yksikko}`, cx, cy - 30);
-            ctx.fillStyle = '#888'; ctx.font = '12px monospace';
-            ctx.fillText(`${min} - ${max}`, cx, cy + 15);
-        }
-
-        // --- KELLOJEN PÄIVITYS ---
-        function paivitaKellot(nyt) {
-            // Digitaalinen
-            document.getElementById('kello-normaali').innerText = nyt.toLocaleTimeString('fi-FI');
-            
-            // Analoginen
-            const hh = nyt.getHours(); const mm = nyt.getMinutes(); const ss = nyt.getSeconds();
-            const hDeg = (hh % 12) * 30 + (mm * 0.5);
-            const mDeg = mm * 6 + (ss * 0.1);
-            const sDeg = ss * 6;
-            
-            document.getElementById('hour-hand').style.transform = `translateX(-50%) rotate(${hDeg}deg)`;
-            document.getElementById('min-hand').style.transform = `translateX(-50%) rotate(${mDeg}deg)`;
-            document.getElementById('sec-hand').style.transform = `translateX(-50%) rotate(${sDeg}deg)`;
-        }
-
-        // --- PÄÄLOOPPI ---
-        function paivitaLiveNakyma() {
-            paivitaKellot(new Date());
-            piirraAvaruusSimulaatio();
-            piirraSaaHUD();
-            
-            // Päivitetään analogiset mittarit jatkuvasti
-            piirraAnaloginenMittari('gauge-pressure', sääData.pressure, 950, 1050, '', '#e2e8f0');
-            piirraAnaloginenMittari('gauge-uv', sääData.uv, 0, 11, '', '#fb923c');
-            piirraAnaloginenMittari('gauge-clouds', sääData.clouds, 0, 100, '', '#94a3b8');
-            piirraAnaloginenMittari('gauge-dew', sääData.dew, -30, 30, '', '#60a5fa');
-
-            requestAnimationFrame(paivitaLiveNakyma);
-        }
-        requestAnimationFrame(paivitaLiveNakyma);
-
-        // --- DATAN HAKU ---
-        let varasto = JSON.parse(localStorage.getItem('kotka_data')) || {};
-        function tallennaJaNayta(id, arvo) {
-            if (!varasto[id]) varasto[id] = [];
-            const nyt = Date.now(); 
-            if(varasto[id].length === 0 || varasto[id][varasto[id].length-1].arvo !== arvo) {
-                varasto[id].push({ aika: nyt, arvo: arvo });
-            }
-            varasto[id] = varasto[id].filter(r => r.aika > nyt - 24*60*60*1000);
-            localStorage.setItem('kotka_data', JSON.stringify(varasto)); piirraLoki(id);
-        }
-        function piirraLoki(id) {
-            const log = document.getElementById(`log-${id}`); if (!log || !varasto[id]) return;
-            log.innerHTML = varasto[id].slice().reverse().map(r => `<div class="data-row"><span class="time">${new Date(r.aika).toLocaleTimeString('fi-FI', {hour:'2-digit', minute:'2-digit'})}</span> <span class="value">${r.arvo}</span></div>`).join('');
-        }
-
-        async function vaihdaKaupunki() {
-            const inputKaupunki = document.getElementById('kaupunki-input').value;
-            if(!inputKaupunki) return;
             try {
-                let res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${inputKaupunki}&count=1&language=fi&format=json`);
-                let data = await res.json();
-                if(data.results && data.results.length > 0) {
-                    lat = data.results[0].latitude; lon = data.results[0].longitude; kohdeKaupunki = data.results[0].name;
-                    document.getElementById('city-title').innerText = kohdeKaupunki + "n";
-                    haeKaikkiData();
-                } else alert("Kaupunkia ei löytynyt.");
-            } catch(e) {}
+                const response = await fetch(`https://wttr.in/${encodeURIComponent(cityInput)}?format=j1&lang=fi`);
+                if (!response.ok) throw new Error("Säätietojen haku epäonnistui");
+                const data = await response.json();
+                updateUI(data);
+            } catch (error) {
+                console.error("Virhe:", error);
+                alert("Sään haku epäonnistui. Varmista, että kirjoitit kaupungin oikein.");
+            }
         }
 
-        async function haeKaikkiData() {
-            try { // Pörssisähkö
-                let rE = await fetch('https://api.porssisahko.net/v1/latest-prices.json'); let dE = await rE.json();
-                let nytAika = new Date();
-                let nykyHinta = dE.prices.find(p => new Date(p.startDate) <= nytAika && new Date(p.endDate) > nytAika);
-                tallennaJaNayta('sahko', nykyHinta ? `${nykyHinta.price.toFixed(2)} snt/kWh` : 'Ei dataa');
-            } catch(e) {}
-
-            try { // Sää Open-Meteo
-                let rS = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,uv_index,cloudcover,dewpoint_2m&hourly=temperature_2m,precipitation&daily=temperature_2m_max,sunrise,sunset&past_days=7&timezone=Europe%2FHelsinki&wind_speed_unit=ms`);
-                let dS = await rS.json();
-                
-                // Päivitä sääolio globaalisti piirtämistä varten
-                sääData.temp = dS.current.temperature_2m;
-                sääData.wind = dS.current.wind_speed_10m;
-                sääData.windDir = dS.current.wind_direction_10m;
-                sääData.hum = dS.current.relative_humidity_2m;
-                sääData.pressure = Math.round(dS.current.surface_pressure);
-                sääData.uv = dS.current.uv_index;
-                sääData.clouds = dS.current.cloudcover;
-                sääData.dew = dS.current.dewpoint_2m;
-
-                document.getElementById('log-saa-historia').innerHTML = [...Array(7)].map((_,i) => `<div class="data-row"><span class="time">${['Su','Ma','Ti','Ke','To','Pe','La'][new Date(dS.daily.time[i]).getDay()]} ${new Date(dS.daily.time[i]).getDate()}.${new Date(dS.daily.time[i]).getMonth()+1}.</span> <span class="value">Max ${dS.daily.temperature_2m_max[i]}°C</span></div>`).join('');
-                
-                let idx = dS.hourly.time.findIndex(x => new Date(x) > new Date());
-                document.getElementById('log-saa-tunnit').innerHTML = [...Array(24)].map((_,i) => {
-                    let kAika = new Date(dS.hourly.time[idx+i]);
-                    return `<div style="border:1px solid #333; padding:5px; border-radius:4px; text-align:center;">
-                        <div style="color:var(--time); font-size:0.8rem;">${kAika.getHours().toString().padStart(2,'0')}:00</div>
-                        <div style="color:#fff; font-weight:bold;">${dS.hourly.temperature_2m[idx+i]}°C</div>
-                        <div style="color:var(--water); font-size:0.8rem;">${dS.hourly.precipitation[idx+i]||0}mm</div>
-                    </div>`;
-                }).join('');
-
-                let rA = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi,pm2_5`);
-                let dA = await rA.json(); tallennaJaNayta('ilmanlaatu', `AQI: ${dA.current.european_aqi} | PM2.5: ${dA.current.pm2_5}µg`);
-
-                let rI = await fetch('https://api.wheretheiss.at/v1/satellites/25544'); let dI = await rI.json();
-                let distISS = Math.sqrt(Math.pow(dI.latitude - lat, 2) + Math.pow(dI.longitude - lon, 2));
-                tallennaJaNayta('avaruus', `ISS: ${distISS < 15 ? "Lähistöllä!" : "Horisontin takana"} | 🌅 ${new Date(dS.daily.sunrise[7]).toLocaleTimeString('fi-FI', {hour:'2-digit', minute:'2-digit'})}`);
-
-            } catch(e) { console.error(e); }
-
-            try { // Merisää
-                let rM = await fetch(`https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height`);
-                let dM = await rM.json(); tallennaJaNayta('merisaa', dM.current.wave_height ? `Aallot: ${dM.current.wave_height} m` : 'Ei dataa sisämaassa');
-            } catch(e) {}
-
-            try { // Satamatutka
-                let rL = await fetch('https://vessel-v2.digitraffic.fi/api/v1/vessels/locations'); let dL = await rL.json();
-                let laivat = dL.features.filter(f => Math.sqrt(Math.pow(f.geometry.coordinates[1] - lat, 2) + Math.pow(f.geometry.coordinates[0] - lon, 2)) < 0.15);
-                tallennaJaNayta('satamatutka', `Aluksia säteellä (15km): ${laivat.length} kpl`);
-            } catch(e) {}
+        function getMoonDetails(phaseEng) {
+            const phases = {
+                "New Moon": { name: "Uusikuu", icon: "🌑" },
+                "Waxing Crescent": { name: "Kasvava sirppi", icon: "🌒" },
+                "First Quarter": { name: "Puolikuu (kasvava)", icon: "🌓" },
+                "Waxing Gibbous": { name: "Kasvava kuperakuu", icon: "🌔" },
+                "Full Moon": { name: "Täysikuu", icon: "🌕" },
+                "Waning Gibbous": { name: "Pienenevä kuperakuu", icon: "🌖" },
+                "Last Quarter": { name: "Puolikuu (pienenevä)", icon: "🌗" },
+                "Waning Crescent": { name: "Pienenevä sirppi", icon: "🌘" }
+            };
+            return phases[phaseEng] || { name: phaseEng, icon: "🌙" };
         }
 
-        function tyhjennaMuisti() { localStorage.removeItem('kotka_data'); location.reload(); }
-        ['merisaa', 'satamatutka', 'sahko', 'ilmanlaatu', 'avaruus'].forEach(piirraLoki);
-        
-        haeKaikkiData(); setInterval(haeKaikkiData, 5 * 60 * 1000); 
+        function parseTimeAMPM(timeStr) {
+            if (!timeStr) return { h: 0, m: 0 };
+            const [time, modifier] = timeStr.split(' ');
+            let [hours, minutes] = time.split(':');
+            hours = parseInt(hours, 10);
+            if (hours === 12) hours = 0;
+            if (modifier === 'PM') hours += 12;
+            return { h: hours, m: parseInt(minutes, 10) };
+        }
 
+        function updateUI(data) {
+            const current = data.current_condition[0];
+            const today = data.weather[0];
+            const tomorrow = data.weather[1];
+            const area = data.nearest_area[0];
+            
+            const lat = parseFloat(area.latitude);
+            const lon = parseFloat(area.longitude);
+            document.getElementById('cityName').innerText = area.areaName[0].value;
+
+            const tempC = parseFloat(current.temp_C);
+            document.getElementById('temp').innerText = `${tempC} °C`;
+            const desc = current.lang_fi ? current.lang_fi[0].value : current.weatherDesc[0].value;
+            document.getElementById('weatherDesc').innerText = desc;
+
+            document.getElementById('feelsLike').innerText = `${current.FeelsLikeC} °C`;
+            document.getElementById('tempMin').innerText = `${today.mintempC} °C`;
+            document.getElementById('tempMax').innerText = `${today.maxtempC} °C`;
+
+            const windMs = (parseFloat(current.windspeedKmph) / 3.6).toFixed(1);
+            document.getElementById('windSpeed').innerText = `${windMs} m/s`;
+            document.getElementById('compassArrow').style.transform = `rotate(${current.winddirDegree}deg)`;
+
+            const rainNow = parseFloat(current.precipMM || 0);
+
+            // Pukeutumisvinkki
+            let dressIcon = "👕";
+            let dressText = "T-paita sää, nauti!";
+            if (rainNow > 0) { dressIcon = "☔"; dressText = "Sateenvarjo ja vedenpitävää päälle!"; } 
+            else if (tempC < -10) { dressIcon = "🧊"; dressText = "Paukkupakkanen. Kerrospukeutuminen!"; } 
+            else if (tempC < 0) { dressIcon = "🧤"; dressText = "Talvitakki, pipo ja hanskat tarpeen."; } 
+            else if (tempC < 10) { dressIcon = "🧥"; dressText = "Kevyt takki tai paksu neule päälle."; } 
+            else if (tempC < 18) { dressIcon = "🧣"; dressText = "Huppari tai pitkähihainen riittää."; } 
+            else if (tempC >= 25) { dressIcon = "🕶️"; dressText = "Helle! Aurinkolasit ja vesipullo mukaan."; }
+            document.getElementById('dressIcon').innerText = dressIcon;
+            document.getElementById('dressText').innerText = dressText;
+
+            document.getElementById('pressure').innerText = current.pressure;
+            document.getElementById('visibility').innerText = current.visibility;
+            document.getElementById('humidity').innerText = `${current.humidity} %`;
+
+            const uvIndex = parseFloat(current.uvIndex || 0);
+            document.getElementById('uvValue').innerText = uvIndex;
+            document.getElementById('uvPointer').style.left = `${Math.min(100, (uvIndex / 11) * 100)}%`;
+
+            // Tähtitaivas
+            const cloudcover = parseInt(current.cloudcover || 0);
+            document.getElementById('cloudCoverValue').innerText = cloudcover;
+            const nowH = new Date().getHours();
+            const isDay = (nowH > 6 && nowH < 22); 
+            
+            let starIcon = "✨"; let starText = "Täydellinen katselusää!";
+            if (cloudcover > 80) { starIcon = "☁️"; starText = "Paksussa pilvessä, ei näy mitään."; } 
+            else if (cloudcover > 30) { starIcon = "🌤️"; starText = "Osittain pilvistä, voi tuurilla nähdä."; } 
+            else if (isDay) { starIcon = "☀️"; starText = "Liian valoisaa, odota yötä."; }
+            
+            document.getElementById('starIcon').innerText = starIcon;
+            document.getElementById('starText').innerText = starText;
+            document.getElementById('starPointer').style.left = `${cloudcover}%`;
+
+            // Aurinko
+            const astronomyToday = today.astronomy[0];
+            const astronomyTomorrow = tomorrow.astronomy[0];
+            const riseParsed = parseTimeAMPM(astronomyToday.sunrise);
+            const setParsed = parseTimeAMPM(astronomyToday.sunset);
+            document.getElementById('sunriseTime').innerText = riseParsed.h.toString().padStart(2, '0') + ":" + riseParsed.m.toString().padStart(2, '0');
+            document.getElementById('sunsetTime').innerText = setParsed.h.toString().padStart(2, '0') + ":" + setParsed.m.toString().padStart(2, '0');
+            setupSunCountdown(astronomyToday, astronomyTomorrow);
+
+            // Kuu
+            const moonData = getMoonDetails(astronomyToday.moon_phase);
+            document.getElementById('moonIcon').innerText = moonData.icon;
+            document.getElementById('moonPhase').innerText = moonData.name;
+            document.getElementById('moonIllumination').innerText = astronomyToday.moon_illumination;
+
+            // Ennustelista & Datan keräys trendigraafia varten
+            const forecastBox = document.getElementById('forecastBox');
+            forecastBox.innerHTML = '';
+            let hoursAdded = 0;
+            let nextHoursData = [];
+            
+            for (let day of data.weather) {
+                let isToday = data.weather.indexOf(day) === 0;
+                for (let hour of day.hourly) {
+                    let timeNum = parseInt(hour.time);
+                    let hourVal = timeNum / 100;
+
+                    // Suodatetaan pois jo menneet tunnit tästä päivästä
+                    if (isToday && hourVal < nowH - 2) continue;
+
+                    if (hoursAdded >= 12) break; 
+                    nextHoursData.push(hour); // Tallennetaan data graafia varten
+                    
+                    let timeStr = hourVal.toString().padStart(2, '0') + ":00";
+                    forecastBox.innerHTML += `
+                        <div class="scroll-item">
+                            <span>Klo ${timeStr}</span>
+                            <span style="color:#38bdf8;">💧 ${hour.precipMM}mm</span>
+                            <strong>${hour.tempC}°C</strong>
+                        </div>`;
+                    hoursAdded++;
+                }
+            }
+            startAutoScroll();
+
+            // Kartta ja Sade
+            map.setView([lat, lon], 10);
+            marker.setLatLng([lat, lon]);
+            document.getElementById('rainAmount').innerText = `${rainNow} mm`;
+            document.getElementById('rainText').innerText = rainNow > 0 ? "Sateista" : "Ei sadetta juuri nyt";
+            
+            // Piirretään lämpötilatrendi
+            setupTrendChart(nextHoursData);
+        }
+
+        // --- LÄMPÖTILATRENDI (Pylväsgraafi) ---
+        function setupTrendChart(hoursData) {
+            const chart = document.getElementById('trendChart');
+            chart.innerHTML = '';
+            
+            // Otetaan 5 seuraavaa aikajaksoa graafiin
+            const next5 = hoursData.slice(0, 5);
+            if(next5.length === 0) return;
+
+            let temps = next5.map(h => parseInt(h.tempC));
+            let minT = Math.min(...temps);
+            let maxT = Math.max(...temps);
+            
+            // Estetään jakolasku nollalla, jos lämpötila pysyy täysin samana
+            if (minT === maxT) { minT -= 1; maxT += 1; }
+            const range = (maxT - minT);
+
+            next5.forEach(hour => {
+                const temp = parseInt(hour.tempC);
+                let timeNum = parseInt(hour.time) / 100;
+                let timeStr = timeNum.toString().padStart(2, '0') + ":00";
+                
+                // Skaalataan pylvään korkeus (25% - 100%)
+                const heightPct = 25 + ((temp - minT) / range) * 75;
+                const color = temp <= 0 ? '#38bdf8' : '#f97316'; // Sininen jos pakkasta, muuten oranssi
+
+                const barContainer = document.createElement('div');
+                barContainer.className = 'trend-bar-container';
+                
+                const bar = document.createElement('div');
+                bar.className = 'trend-bar';
+                bar.style.height = `${heightPct}%`;
+                bar.style.backgroundColor = color;
+                
+                const valLab = document.createElement('div');
+                valLab.className = 'trend-val';
+                valLab.innerText = `${temp}°`;
+                
+                const timeLab = document.createElement('div');
+                timeLab.className = 'trend-time';
+                timeLab.innerText = timeStr;
+                
+                bar.appendChild(valLab);
+                barContainer.appendChild(bar);
+                barContainer.appendChild(timeLab);
+                chart.appendChild(barContainer);
+            });
+        }
+
+        // --- AURINGON LASKURI ---
+        function setupSunCountdown(astroToday, astroTomorrow) {
+            if (sunCountdownTimer) clearInterval(sunCountdownTimer);
+
+            sunCountdownTimer = setInterval(() => {
+                const now = new Date();
+                const riseTodayParsed = parseTimeAMPM(astroToday.sunrise);
+                const setTodayParsed = parseTimeAMPM(astroToday.sunset);
+                
+                const riseToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), riseTodayParsed.h, riseTodayParsed.m, 0);
+                const setToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), setTodayParsed.h, setTodayParsed.m, 0);
+                
+                let targetDate;
+                let eventName = "";
+
+                if (now < riseToday) {
+                    targetDate = riseToday;
+                    eventName = "Auringonnousuun:";
+                } else if (now >= riseToday && now < setToday) {
+                    targetDate = setToday;
+                    eventName = "Auringonlaskuun:";
+                } else {
+                    const riseTomorrowParsed = parseTimeAMPM(astroTomorrow.sunrise);
+                    targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, riseTomorrowParsed.h, riseTomorrowParsed.m, 0);
+                    eventName = "Nousuun (huomenna):";
+                }
+
+                const diff = targetDate - now;
+                if (diff <= 0) {
+                    document.getElementById('countdownLabel').innerText = "Tapahtuu nyt!";
+                    document.getElementById('sunCountdown').innerText = "00:00:00";
+                    return;
+                }
+
+                const hours = Math.floor(diff / (1000 * 60 * 60));
+                const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+                document.getElementById('countdownLabel').innerText = eventName;
+                document.getElementById('sunCountdown').innerText = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        // --- SKROLLAUS ---
+        const forecastBoxElement = document.getElementById('forecastBox');
+        let isDown = false, startY, scrollTop, autoScrollInterval, scrollDirection = 1;
+
+        forecastBoxElement.addEventListener('mousedown', (e) => {
+            isDown = true;
+            startY = e.pageY - forecastBoxElement.offsetTop;
+            scrollTop = forecastBoxElement.scrollTop;
+            stopAutoScroll();
+        });
+        forecastBoxElement.addEventListener('mouseleave', () => { isDown = false; startAutoScroll(); });
+        forecastBoxElement.addEventListener('mouseup', () => { isDown = false; });
+        forecastBoxElement.addEventListener('mousemove', (e) => {
+            if (!isDown) return;
+            e.preventDefault();
+            forecastBoxElement.scrollTop = scrollTop - ((e.pageY - forecastBoxElement.offsetTop - startY) * 1.5);
+        });
+        forecastBoxElement.addEventListener('mouseenter', stopAutoScroll);
+
+        function startAutoScroll() {
+            stopAutoScroll();
+            autoScrollInterval = setInterval(() => {
+                if (!isDown) {
+                    forecastBoxElement.scrollTop += scrollDirection;
+                    if (forecastBoxElement.scrollTop >= (forecastBoxElement.scrollHeight - forecastBoxElement.clientHeight - 1)) {
+                        scrollDirection = -1;
+                    } else if (forecastBoxElement.scrollTop <= 0) {
+                        scrollDirection = 1;
+                    }
+                }
+            }, 50);
+        }
+
+        function stopAutoScroll() { clearInterval(autoScrollInterval); }
+
+        window.onload = () => {
+            getWeather();
+            setInterval(() => { getWeather(); }, 600000); 
+        };
     </script>
 </body>
 </html>
